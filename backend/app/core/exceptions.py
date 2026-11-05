@@ -1,6 +1,20 @@
+import logging
 from typing import Any, Optional
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
+
+
+def _cors_headers(request: Request) -> dict:
+    origin = request.headers.get("origin")
+    headers = {}
+    if origin:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Access-Control-Allow-Methods"] = "*"
+        headers["Access-Control-Allow-Headers"] = "*"
+    return headers
 
 
 class AppException(Exception):
@@ -59,6 +73,7 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
     """Global handler for handled application exceptions."""
     return JSONResponse(
         status_code=exc.status_code,
+        headers=_cors_headers(request),
         content={
             "success": False,
             "error": {
@@ -72,13 +87,15 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
 
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Global handler for unhandled internal server errors."""
+    logger.exception("Unhandled server exception: %s", exc)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        headers=_cors_headers(request),
         content={
             "success": False,
             "error": {
                 "code": "INTERNAL_SERVER_ERROR",
-                "message": "An unexpected error occurred. Please try again later.",
+                "message": str(exc) if "localhost" in str(exc) or "database" in str(exc).lower() else "An unexpected error occurred. Please check database connection and server logs.",
             },
         },
     )
